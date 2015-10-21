@@ -16,17 +16,17 @@
  *
  * Usage: 
  *   f = ...
- *        flaglet_axisym_synthesis_mex(f_wav, f_scal, B_l, B_n, L, N, J_min_l, J_min_n, reality));
+ *        flaglet_axisym_synthesis_mex(f_wav, f_scal, B_l, B_p, L, P, J_min_l, J_min_p, N, Downsample);
  *
  */
 void mexFunction( int nlhs, mxArray *plhs[],
                   int nrhs, const mxArray *prhs[])
 {
-  int n, p, t, i, j, f_m, f_n, reality, downsample;
-  int B_l, B_n, L, N, J_min_l, J_min_n;
+  int n, p, t, i, j, f_m, f_n;
+  int B_l, B_p, L, P, N, J_min_l, J_min_p;
+  flaglet_parameters_t parameters = {};
   double *f_wav_real, *f_scal_real, *f_real, *f_wav_imag, *f_scal_imag, *f_imag;
   complex double *f_wav, *f_scal, *f;
-  double *f_wav_r, *f_scal_r, *f_r;
   int iin = 0, iout = 0;
 
   // Check number of arguments
@@ -39,19 +39,12 @@ void mexFunction( int nlhs, mxArray *plhs[],
           "Require two outputs.");
   }
 
-  // Parse reality flag
-  iin = 9;
-  if( !mxIsLogicalScalar(prhs[iin]) )
-    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:reality",
-          "Reality flag must be logical.");
-  reality = mxIsLogicalScalarTrue(prhs[iin]);
-
   // Parse multiresolution flag
   iin = 10;
   if( !mxIsLogicalScalar(prhs[iin]) )
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:downsample",
           "Multiresolution flag must be logical.");
-  downsample = mxIsLogicalScalarTrue(prhs[iin]);
+  parameters.upsample = !mxIsLogicalScalarTrue(prhs[iin]);
 
   // Parse input wavelets f_wav
   iin = 0;
@@ -63,16 +56,10 @@ void mexFunction( int nlhs, mxArray *plhs[],
   f_n = mxGetN(prhs[iin]);
   int f_is_complex = mxIsComplex(prhs[iin]);
   f_wav_real = mxGetPr(prhs[iin]);
-  if(reality){
-    f_wav_r = (double*)malloc( f_m*f_n * sizeof(double));
-    for(j=0; j<f_m*f_n; j++)
-      f_wav_r[ j ] = f_wav_real[ j ];
-  }else{
-    f_wav_imag = mxGetPi(prhs[iin]);
-    f_wav = (complex double*)malloc( f_m*f_n * sizeof(complex double));
-    for(j=0; j<f_m*f_n; j++)
-        f_wav[ j ] = f_wav_real[ j ] + I * (f_is_complex ? f_wav_imag[ j ] : 0.0);
-  }
+  f_wav_imag = mxGetPi(prhs[iin]);
+  f_wav = (complex double*)malloc( f_m*f_n * sizeof(complex double));
+  for(j=0; j<f_m*f_n; j++)
+      f_wav[ j ] = f_wav_real[ j ] + I * (f_is_complex ? f_wav_imag[ j ] : 0.0);
 
   // Parse input scaling function f_scal
   iin = 1;
@@ -80,19 +67,11 @@ void mexFunction( int nlhs, mxArray *plhs[],
   f_n = mxGetN(prhs[iin]);
   f_is_complex = mxIsComplex(prhs[iin]);
   f_scal_real = mxGetPr(prhs[iin]);
-  if(reality){
-    f_scal_r = (double*)malloc( f_m*f_n * sizeof(double));
-    for(t=0; t<f_m; t++)
-      for(p=0; p<f_n; p++)
-      f_scal_r[ t*f_n + p ] = f_scal_real[ p*f_m + t ];
-  }else{
-    f_scal_imag = mxGetPi(prhs[iin]);
-    f_scal = (complex double*)malloc( f_m*f_n * sizeof(complex double));
-    for(t=0; t<f_m; t++)
-      for(p=0; p<f_n; p++)
-        f_scal[ t*f_n + p ] = f_scal_real[ p*f_m + t ] + I * (f_is_complex ? f_scal_imag[ p*f_m + t ] : 0.0);
-  }
-
+  f_scal_imag = mxGetPi(prhs[iin]);
+  f_scal = (complex double*)malloc( f_m*f_n * sizeof(complex double));
+  for(t=0; t<f_m; t++)
+    for(p=0; p<f_n; p++)
+      f_scal[ t*f_n + p ] = f_scal_real[ p*f_m + t ] + I * (f_is_complex ? f_scal_imag[ p*f_m + t ] : 0.0);
 
   // Parse angular wavelet parameter B_l
   iin = 2;
@@ -103,24 +82,26 @@ void mexFunction( int nlhs, mxArray *plhs[],
           "Wavelet parameter B_l must be integer.");
   }
   B_l = (int)mxGetScalar(prhs[iin]);
+  parameters.B_l = B_l;
 
   if (mxGetScalar(prhs[iin]) > (double)B_l || B_l <= 1)
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:bandLimitNonInt",
           "Wavelet parameter B_l must be positive integer greater than 2");
 
-  // Parse radial wavelet parameter B_n
+  // Parse radial wavelet parameter B_p
   iin = 3;
   if( !mxIsDouble(prhs[iin]) || 
       mxIsComplex(prhs[iin]) || 
       mxGetNumberOfElements(prhs[iin])!=1 ) {
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:waveletParameter",
-          "Wavelet parameter B_n must be integer.");
+          "Wavelet parameter B_p must be integer.");
   }
-  B_n = (int)mxGetScalar(prhs[iin]);
+  B_p = (int)mxGetScalar(prhs[iin]);
+  parameters.B_p = B_p;
 
-  if (mxGetScalar(prhs[iin]) > (double)B_n || B_n <= 1)
+  if (mxGetScalar(prhs[iin]) > (double)B_p || B_p <= 1)
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:bandLimitNonInt",
-          "Wavelet parameter B_n must be positive integer greater than 2");
+          "Wavelet parameter B_p must be positive integer greater than 2");
 
   // Parse harmonic band-limit L
   iin = 4;
@@ -131,6 +112,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
           "Harmonic band-limit L must be integer.");
   }
   L = (int)mxGetScalar(prhs[iin]);
+  parameters.L = L;
 
 
   if (mxGetScalar(prhs[iin]) > (double)L || L <= 0)
@@ -142,24 +124,25 @@ void mexFunction( int nlhs, mxArray *plhs[],
           "Wavelet parameter B_l must be smaller than L!");
   }
 
-    // Parse harmonic band-limit N
+    // Parse harmonic band-limit P
   iin = 5;
   if( !mxIsDouble(prhs[iin]) || 
       mxIsComplex(prhs[iin]) || 
       mxGetNumberOfElements(prhs[iin])!=1 ) {
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:LbandLimit",
-          "Harmonic band-limit N must be integer.");
+          "Harmonic band-limit P must be integer.");
   }
-  N = (int)mxGetScalar(prhs[iin]);
+  P = (int)mxGetScalar(prhs[iin]);
+  parameters.P = P;
 
 
-  if (mxGetScalar(prhs[iin]) > (double)N || N <= 0)
+  if (mxGetScalar(prhs[iin]) > (double)P|| P <= 0)
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:bandLimitNonInt",
-          "Harmonic band-limit N must be positive integer.");
+          "Harmonic band-limit P must be positive integer.");
 
-  if( B_n >= N ) {
+  if( B_p >= P ) {
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:waveletParameter",
-          "Wavelet parameter B_n must be smaller than N!");
+          "Wavelet parameter B_p must be smaller than P!");
   }
  
   // Parse angular first scale J_min_l
@@ -171,6 +154,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
           "First scale J_min_l must be integer.");
   }
   J_min_l = (int)mxGetScalar(prhs[iin]);
+  parameters.J_min_l = J_min_l;
 
   if (mxGetScalar(prhs[iin]) > (double)J_min_l || J_min_l < 0)
     mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_l",
@@ -185,26 +169,27 @@ void mexFunction( int nlhs, mxArray *plhs[],
           "First scale J_min_l must be larger than that!");
   }
 
-  // Parse angular first scale J_min_n
+  // Parse angular first scale J_min_p
   iin = 7;
   if( !mxIsDouble(prhs[iin]) || 
       mxIsComplex(prhs[iin]) || 
       mxGetNumberOfElements(prhs[iin])!=1 ) {
-    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_n",
-          "First scale J_min_n must be integer.");
+    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_p",
+          "First scale J_min_p must be integer.");
   }
-  J_min_n = (int)mxGetScalar(prhs[iin]);
+  J_min_p = (int)mxGetScalar(prhs[iin]);
+  parameters.J_min_p = J_min_p;
 
-  if (mxGetScalar(prhs[iin]) > (double)J_min_n || J_min_n < 0)
-    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_n",
-          "First scale J_min_n must be positive integer.");
+  if (mxGetScalar(prhs[iin]) > (double)J_min_p || J_min_p < 0)
+    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_p",
+          "First scale J_min_p must be positive integer.");
 
   // Compute ultimate scale J_max
-  int J_n = ceil(log(N) / log(B_n));
+  int J_p = ceil(log(P) / log(B_p));
 
-  if( J_min_n > J_n+1 ) {
-    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_n",
-          "First scale J_min_n must be larger than that!");
+  if( J_min_p > J_p+1 ) {
+    mexErrMsgIdAndTxt("flaglet_axisym_synthesis_mex:InvalidInput:J_min_p",
+          "First scale J_min_p must be larger than that!");
   }
 
   // Parse harmonic band-limit R
@@ -215,70 +200,44 @@ void mexFunction( int nlhs, mxArray *plhs[],
     mexErrMsgIdAndTxt("slag_synthesis_mex:InvalidInput:Rlimit",
           "Radial limit R must be positive real.");
   }
-  double R = mxGetScalar(prhs[iin]);
-  if ( R <= 0 )
+  parameters.tau = mxGetScalar(prhs[iin]);
+  if ( parameters.tau <= 0 )
     mexErrMsgIdAndTxt("slag_synthesis_mex:InvalidInput:RLimitNonInt",
           "Radial limit R must be positive real.");
 
-  // Perform wavelet transform in harmonic space and then FLAG reconstruction.
-  if(downsample){
-
-    // Multiresolution algorithm
-    if(reality){
-      f_r = (double*)calloc( L * (2*L-1) * N, sizeof(double));
-      flaglet_axisym_wav_synthesis_multires_real(f_r, f_wav_r, f_scal_r, R, B_l, B_n, L, N, J_min_l, J_min_n);
-    }else{
-      f = (complex double*)calloc( L * (2*L-1) * N, sizeof(complex double));
-      flaglet_axisym_wav_synthesis_multires(f, f_wav, f_scal, R, B_l, B_n, L, N, J_min_l, J_min_n); 
-    }
-  }else{
-    // Full-resolution algorithm
-    if(reality){
-      f_r = (double*)calloc( L * (2*L-1) * N, sizeof(double));
-      flaglet_axisym_wav_synthesis_real(f_r, f_wav_r, f_scal_r, R, B_l, B_n, L, N, J_min_l, J_min_n);
-    }else{
-      f = (complex double*)calloc( L * (2*L-1) * N, sizeof(complex double));
-      flaglet_axisym_wav_synthesis(f, f_wav, f_scal, R, B_l, B_n, L, N, J_min_l, J_min_n); 
-    }
-    
+  // Parse azimuthal band-limit  N
+  iin = 9;
+  if( !mxIsDouble(prhs[iin]) || 
+      mxIsComplex(prhs[iin]) || 
+      mxGetNumberOfElements(prhs[iin])!=1 ) {
+    mexErrMsgIdAndTxt("flaglet_analysis_mex:InvalidInput:N",
+          "First scale N must be integer.");
   }
+  N = (int)mxGetScalar(prhs[iin]);
+  parameters.N = N;
+
+  
+  f = (complex double*)calloc( L * (2*L-1) * P, sizeof(complex double));
+  flaglet_synthesis(f, f_wav, f_scal, &parameters);
   
 
   int ntheta = L;
   int nphi = 2 * L - 1;
 
   // Output function f
-  if(reality){
-
-    iout = 0;
-    plhs[iout] = mxCreateDoubleMatrix(N, L*(2*L-1), mxREAL);
-    f_real = mxGetPr(plhs[iout]);
-    for(n=0; n<N; n++) 
-      for(i=0; i<ntheta*nphi; i++) 
-        f_real[i*N + n] = creal(f_r[n*ntheta*nphi + i]);
-
-  }else{
-
-    iout = 0;
-    plhs[iout] = mxCreateDoubleMatrix(N, L*(2*L-1), mxCOMPLEX);
-    f_real = mxGetPr(plhs[iout]);
-    f_imag = mxGetPi(plhs[iout]);
-    for(n=0; n<N; n++) {    
-      for(i=0; i<ntheta*nphi; i++) {
-        f_real[i*N + n] = creal( f[n*ntheta*nphi + i] );
-        f_imag[i*N + n] = cimag( f[n*ntheta*nphi + i] );
-      }
+  iout = 0;
+  plhs[iout] = mxCreateDoubleMatrix(P, L*(2*L-1), mxCOMPLEX);
+  f_real = mxGetPr(plhs[iout]);
+  f_imag = mxGetPi(plhs[iout]);
+  for(n=0; n<P; n++) {    
+    for(i=0; i<ntheta*nphi; i++) {
+      f_real[i*P+ n] = creal( f[n*ntheta*nphi + i] );
+      f_imag[i*P+ n] = cimag( f[n*ntheta*nphi + i] );
     }
   }
-
-   if(reality){
-    free(f_r);
-    free(f_wav_r);
-    free(f_scal_r);
-  }else{
-    free(f);
-    free(f_wav);
-    free(f_scal);
-  }
+  
+  free(f);
+  free(f_wav);
+  free(f_scal);
 
 }

@@ -95,9 +95,9 @@ FFLAGS  = -I$(FLAGLETINC) -I$(FFTWINC) -I$(SSHTINC) -I$(FLAGINC) -I$(S2LETINC) -
 
 FLAGLETOBJS = $(FLAGLETOBJ)/flaglet_transform.o $(FLAGLETOBJ)/flaglet_tiling.o
 
-FLAGLETOBJSMAT = $(FLAGLETOBJMAT)/flaglet_tiling_mex.o $(FLAGLETOBJMAT)/flaglet_axisym_analysis_mex.o $(FLAGLETOBJMAT)/flaglet_axisym_synthesis_mex.o
+FLAGLETOBJSMAT = $(FLAGLETOBJMAT)/flaglet_tiling_mex.o $(FLAGLETOBJMAT)/flaglet_analysis_mex.o $(FLAGLETOBJMAT)/flaglet_synthesis_mex.o
 
-FLAGLETOBJSMEX = $(FLAGLETOBJMEX)/flaglet_tiling_mex.$(MEXEXT) $(FLAGLETOBJMAT)/flaglet_axisym_analysis_mex.$(MEXEXT) $(FLAGLETOBJMAT)/flaglet_axisym_synthesis_mex.$(MEXEXT)
+FLAGLETOBJSMEX = $(FLAGLETOBJMEX)/flaglet_tiling_mex.$(MEXEXT) $(FLAGLETOBJMAT)/flaglet_analysis_mex.$(MEXEXT) $(FLAGLETOBJMAT)/flaglet_synthesis_mex.$(MEXEXT)
 
 $(FLAGLETOBJ)/%.o: %.c
 	$(CC) $(OPT) $(FFLAGS) -c $< -o $@
@@ -109,7 +109,7 @@ $(FLAGLETOBJMAT)/%_mex.o: %_mex.c $(FLAGLETLIB)/lib$(FLAGLETLIBN).a
 	$(CC) $(OPT) $(FFLAGS) -c $< -o $@ -I${MLABINC}
 
 $(FLAGLETOBJMEX)/%_mex.$(MEXEXT): $(FLAGLETOBJMAT)/%_mex.o $(FLAGLETLIB)/lib$(FLAGLETLIBN).a
-	$(MEX) $< -o $@ $(LDFLAGSMEX) $(MEXFLAGS) -L$(MLABLIB)
+	$(MEX) $< -output $@ $(LDFLAGSMEX) $(MEXFLAGS) -L$(MLABLIB)
 
 # ======================================== #
 
